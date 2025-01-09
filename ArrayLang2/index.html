@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<head>
+	<meta charset="utf-8">
+	<title>ArrayLang</title>
+</head>
+<body>
+	<label for="codetext">Paste the code here:</label><br>
+	<textarea id="codetext" rows="24" cols="80" spellcheck=false autofocus></textarea><br>
+	<button id="run" onclick="run()">Convert</button>
+	<button id="clear" onclick="result.value = null">Clear Output</button><br>
+	<button id="test" onclick="test1()">Test 1</button>
+	<button id="test" onclick="test2()">Test 2</button><br>
+	<label for="result">Array output:</label><br>
+	<textarea id="result" rows="32" cols="80" spellcheck=false readonly></textarea>
+</body>
+<script src=index.js></script>
