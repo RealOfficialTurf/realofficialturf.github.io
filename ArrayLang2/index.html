@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <head>
 	<meta charset="utf-8">
-	<title>ArrayLang</title>
+	<title>ArrayLang 2</title>
 </head>
 <body>
-	<label for="codetext">Paste the code here:</label><br>
+	<label for="codetext">Code Input:</label><br>
 	<textarea id="codetext" rows="24" cols="80" spellcheck=false autofocus></textarea><br>
-	<button id="run" onclick="run()">Convert</button>
-	<button id="clear" onclick="result.value = null">Clear Output</button><br>
+	<button id="run" onclick="errmsg.value='';run()">Convert</button>
+	<button id="clearout" onclick="result.value = ''">Clear Output</button>
+	<button id="clearerr" onclick="errmsg.value = ''">Clear Error</button>
+	<output id="errmsg" for="codetext run"></output><br>
 	<button id="test" onclick="test1()">Test 1</button>
 	<button id="test" onclick="test2()">Test 2</button><br>
 	<label for="result">Array output:</label><br>
