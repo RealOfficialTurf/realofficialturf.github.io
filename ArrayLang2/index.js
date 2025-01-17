@@ -116,17 +116,15 @@ function test2(){
 `global a[4]
 a[2]=a[0]+a[1]+a[2]
 a[1]=a[1]+3
-#[a[0],a[1]+3,a[0]+a[1]+a[2],a[3]]
-if a[1]>2:
+if a[1]>100:
+	a[1]=a[1]-10
+	a[2]=a[2]*2
+	a[0]=42
+elif a[1]>10:
 	a[1]=a[1]-1
-else:
 	a[2]=a[2]/2
-#condition: a[1]>2
-#[a[0],a[1]-1,a[2],a[3]]
-#[a[0],a[1],a[2]/2,a[3]]
-#since only a[1] and a[2] gets modified, they get the if treatment.
-#condition is a[1]>2, which gets substituted with a[1]+3, making it (a[1]+3)>2
-#[a[0],(a[1]+3)>2?(a[1]+3)-1:a[1]+3,(a[1]+3)>2?a[0]+a[1]+a[2]:(a[0]+a[1]+a[2])/2,a[3]]`;
+else:
+	a[2]=a[2]/2`;
 }
 
 function run(){
@@ -180,21 +178,79 @@ function run(){
 	function createinitialvars(name,elemcount){
 		return Array.from({length: elemcount}, (_v,i) => `${name}[${i}]`);
 	}
-	/** @type {string[]} */
-	var varsubs = createinitialvars(varname,varelemcount);
-	//Generate variables
-	
 	/* for(let i = 0;i<varelemcount;i++){
 		varb.push([varname,"[",i,"]"].join(""));
 	} */
-	console.log(varsubs);
-	//Execute order si- I mean, execute the statements!
 	console.log(statements);
 	//
-	/** @type {[string,string[],string[]|null][]} */
-	var condvarsubsstack = [];
-	/** @type {string[]?} */
-	var curvarsubs = null;
+	/**Contains a stack of arrays of variable substitutions.
+	 * 
+	 * A variable substitution `[string|null,string[]]` is a tuple of a `string|null` representing the condition, and a `string[]` (with length of the number of variables) representing the substitutions for each variables.
+	 * The tuple `[string,string[]]` represent the if/elif statement. The tuple `[null,string[]]` represents an else statement.
+	 * 
+	 * An array of variable substitutions `[string|null,string[]][]` is an array of `[string|null,string[]]` representing the stack of if-elif-else statements.
+	 * The first element represents an if statement, and the subsequent elements represents subsequent elif statements. Else statement `[null,string[]]` can only be placed at the last element.
+	 * 
+	 * A stack of arrays of variable substitutions `[string|null,string[]][][]` is a stack of `[string|null,string[]][]` where each element represents the depth level of the statement.
+	 * The first element represents depth level 0 or indentation level 0.
+	 * 
+	 * Example of 
+	 * 
+	 * varsubarr1 = [[null.[varsub1]]] //First array always contains only one element
+	 * 
+	 * varsubarr2 = [["condition1".[varsub1]],["condition2".[varsub2]],["condition3".[varsub3]],[null.[varsub4]]]
+	 * 
+	 * varsubarr3 = [["condition1".[varsub1]],[null.[varsub2]]]
+	 * 
+	 * varsubarr_stack = [varsubarr1,varsubarr2,varsubarr3]
+	 * @type {[string|null,string[]][][]} */
+	var varsubarr_stack = [[[null,createinitialvars(varname,varelemcount)]]];
+	/**Checks whether indentation level matches with stack level
+	 * 
+	 * At indentation level 0, the stack should contain 1 element (depth level 0)
+	 * 
+	 * At indentation level 2, the stack should contain 3 element (depth level 0, depth level 1, depth level 2)
+	 * 
+	 * At indentation level n, the stack should contain n+1 element
+	 * 
+	 * At indentation level 1 and stack level 1, this indicates unexpected indent and the function returns -1
+	 * 
+	 * At indentation level 0 and stack level 2, this indicates that the code has left the if-else statement and the function returns 1
+	 * 
+	 * @param {number} indent_lvl
+	 * @returns {number} 0 if matches, negative if indent level is lower than stack level (unexpected indent), positive if indent level is higher than stack level
+	 */
+	function checkindentlevel(indent_lvl){
+		return varsubarr_stack.length-1-indent_lvl;
+	}
+	/**Checks whether the array of variable substitutions contains an "else" statement at the last element.
+	 * 
+	 * @param {[string | null, string[]][]} varsubarr
+	 * @returns True if the array of variable substitutions contains an "else" statement at the last element.
+	 */
+	function checkelse_varsubarr(varsubarr){
+		return varsubarr[varsubarr.length-1][0]==null;
+	}
+	/**Returns the n-th element of the stack of arrays of variable substitutions, based on the n-th indent level.
+	 * @param {number} indent_lvl
+	 * @returns {[string | null, string[]][]} An array of variable substitutions on the n-th indent level*/
+	function get_varsubarr_stack(indent_lvl){
+		return varsubarr_stack[indent_lvl];
+	}
+	/**Returns the last element of the given array of variable substitutions. Note that the array is not a stack, and the naming is only for the sake of consistency.
+	 * @param {[string | null, string[]][]} varsubarr
+	 * @returns {[string | null, string[]]} The last element of the array of variable substitutions*/
+	function peek_varsubarr(varsubarr){
+		return varsubarr[varsubarr.length-1];
+	}
+	/**Returns the topmost element of the stack of arrays of variable substitutions without popping it.
+	 * @returns {[string | null, string[]][]} The last element of the stack of arrays of variable substitutions*/
+	function peek_varsubarr_stack(){
+		return varsubarr_stack[varsubarr_stack.length-1];
+	}
+	/**This variable is supposed to hold the string substitutions of the last element of the array of variable substitutions on the current indent level. Use for variable substitutions!
+	 * @type {string[]} */
+	var cur_varsubstr = peek_varsubarr(peek_varsubarr_stack())[1];
 	var curindentlvl = 0;
 	const indentmatcher = /^\t*/;
 	var varmatcher = new RegExp(varname+"\\[(\\d*)\\]","gi");
@@ -204,20 +260,28 @@ function run(){
 			var stmt = line < statements.length ? statements[line] : "";
 			indentmatcher.lastIndex = 0; //Reset the regex state before reusing on other strings
 			var tabs = indentmatcher.exec(stmt)[0];
+			/** The indentation level of the current statement. Lowest is 0. */
 			var indentlvl = tabs.length;
+			/**This should be 1 in elif/else statement, 0 for everywhere else*/
+			var indentlvldiff = checkindentlevel(indentlvl);
 			stmt = stmt.slice(indentlvl)
-			if(indentlvl > curindentlvl){
+			if(indentlvldiff<0){
 				//Unexpected indentation!
 				throw `ERROR: unexpected indentation at line ${line+1}`;
 			}
-			while(indentlvl < curindentlvl){
-				curindentlvl--; //It'll be reincremented again when we find else statement
-				if(indentlvl == curindentlvl && stmt.startsWith("else")){
-					//Don't pop the stack! We need the item in the current level of the stack
+			while(indentlvldiff>0){
+				var poppedvarsubarr = varsubarr_stack.pop();
+				if(!poppedvarsubarr){
+					throw "ERROR: varsubarr_stack is empty. This should not happen. Report this error to the developer."
+				}
+				indentlvldiff = checkindentlevel(indentlvl);
+				if(indentlvldiff==0 && (stmt.startsWith("else") || stmt.startsWith("elif "))){
+					//We need the array for the subsequent elif/else statements! Put it back!
+					varsubarr_stack.push(poppedvarsubarr);
 					break;
 				}
 				//else, pop the stack
-				var poppedcondvarsubs = condvarsubsstack.pop()
+				
 				/*
 				 *	a[2]=a[0]+a[1]+a[2]
 				 *	a[1]=a[1]+3
@@ -234,83 +298,121 @@ function run(){
 				 *	
 				 *	#[a[0],(a[1]+3)>2?(a[1]+3)-1:a[1]+3,(a[1]+3)>2?a[0]+a[1]+a[2]:(a[0]+a[1]+a[2])/2]
 				 */
-				curvarsubs = varsubs;
-				if(curindentlvl>0){
-					curvarsubs = condvarsubsstack[curindentlvl-1][2] ? condvarsubsstack[curindentlvl-1][2]:condvarsubsstack[curindentlvl-1][1];
+				cur_varsubstr = peek_varsubarr(peek_varsubarr_stack())[1];
+				if(!checkelse_varsubarr(poppedvarsubarr)){
+					poppedvarsubarr.push([null,createinitialvars(varname,varelemcount)]) //Quick-fix for else-less statement
 				}
-				if(!curvarsubs){
-					throw "ERROR: Substitution array is null. This should not happen. Report this error to the developer."
-				}
-				var curvarcopy = Array.from(curvarsubs);
-				var condition = poppedcondvarsubs[0];
-				var values1 = poppedcondvarsubs[1];
-				var values2 = poppedcondvarsubs[2];
-				var conditionsubbed = substitutevariable(condition,curvarsubs,varmatcher);
-				if(values2){
-					var valuemask = Array.from({length: varelemcount}, (_v,i) => `${varname}[${i}]` != values1[i] || `${varname}[${i}]` != values2[i]);
-				}
-				else{
-					var valuemask = Array.from({length: varelemcount}, (_v,i) => `${varname}[${i}]` != values1[i]);
-				}
-				console.log("Value mask",valuemask)
-				for(let i = 0;i<varelemcount;i++){
-					if(!valuemask[i]){
-						continue;
+				for(let varsub_idx = 0; varsub_idx<poppedvarsubarr.length;varsub_idx++){
+					var condition = poppedvarsubarr[varsub_idx][0];
+					if(condition){
+						var conditionsubbed = substitutevariable(condition,cur_varsubstr,varmatcher);
+						poppedvarsubarr[varsub_idx][0] = conditionsubbed;
 					}
-					var value1 = values1[i];
-					var valuesubbed1 = substitutevariable(value1,curvarsubs,varmatcher)
-					var valuesubbed2 = curvarsubs[i];
-					if(values2){
-						var value2 = values2[i];
-						var valuesubbed2 = substitutevariable(value2,curvarsubs,varmatcher)
+					for(let i = 0;i<varelemcount;i++){
+						var value = poppedvarsubarr[varsub_idx][1][i];
+						var valuesubbed = substitutevariable(value,cur_varsubstr,varmatcher)
+						poppedvarsubarr[varsub_idx][1][i] = valuesubbed;
 					}
-					console.log(valuesubbed1,valuesubbed2)
-					console.log(`${conditionsubbed}?${valuesubbed1}:${valuesubbed2}`)
-					curvarcopy[i] = `(${conditionsubbed}?${valuesubbed1}:${valuesubbed2})`
 				}
-				for(let i = 0;i<varelemcount;i++){
-					curvarsubs[i] = curvarcopy[i]; //Copy values back to the original variable
-				}
+				do{
+					var cur_value = peek_varsubarr(peek_varsubarr_stack())[1];
+					if(poppedvarsubarr.length>2){
+						cur_value = poppedvarsubarr[poppedvarsubarr.length-2][1];
+					}
+					var condition = poppedvarsubarr[0][0];
+					/** @type {string[]} */
+					var values1 = poppedvarsubarr[0][1];
+					/** @type {string[]} */
+					var values2 = cur_varsubstr;
+					if(poppedvarsubarr.length>=2){
+						condition = poppedvarsubarr[poppedvarsubarr.length-2][0];
+						values1 = poppedvarsubarr[poppedvarsubarr.length-2][1];
+						values2 = poppedvarsubarr[poppedvarsubarr.length-1][1];
+					}
+					var cur_value_temp = Array.from(cur_value);
+					var valuemask = Array.from({length: varelemcount}, (_v,i) => values1[i] != values2[i]);
+					console.log("Value mask",valuemask)
+					for(let i = 0;i<varelemcount;i++){
+						if(!valuemask[i]){
+							cur_value_temp[i] = `${values1[i]}`
+							continue;
+						}
+						console.log(values1,values2)
+						console.log(`${condition}?${values1[i]}:${values2[i]}`)
+						cur_value_temp[i] = `(${condition}?${values1[i]}:${values2[i]})`
+					}
+					for(let i = 0;i<varelemcount;i++){
+						cur_value[i] = cur_value_temp[i]; //Copy values back to the original variable
+					}
+					poppedvarsubarr.pop()
+				} while(poppedvarsubarr.length>=2);
+				
 			}
 			//Begin parsing statements here
-			if(indentlvl>0){
-				curvarsubs = condvarsubsstack[indentlvl-1][2] == null ? condvarsubsstack[indentlvl-1][1]:condvarsubsstack[indentlvl-1][2];
+			/* if(indentlvl>0){
+				curvarsubs = [indentlvl-1][2] == null ? [indentlvl-1][1]:[indentlvl-1][2];
 			}
 			else{
-				curvarsubs = varsubs;
-			}
+				curvarsubs = ;
+			} */
+			indentlvldiff = checkindentlevel(indentlvl);
+			
+			cur_varsubstr = peek_varsubarr(get_varsubarr_stack(indentlvl))[1];
 			if(stmt.startsWith("if ")){
+				if(indentlvldiff!=0){
+					throw `ERROR: Unexpected if statement at line ${line+1}.` //not possible, this should already be caught on the first check
+				}
 				/*Some helpful visualizations
 				#X
 				if: #indentlvl = 0
-					#A
+					#A1
+				elif:
+					#A2
+				else:
+					#A3
 					if: #indentlvl = 1
 						#B
 						if:
 							#C
-				varsubs = X
-				condvarsubsstack = [A,B,C]
+				 = 
+				 = [X,A1A2A3,B,C]
 				*/
 				var condition = stmt.split(" ",2)[1].split(":",1)[0].trim()
 				//Validate condition
 				if(condition.length == 0){
-					throw `ERROR: Expected condition after if statement at line ${line+1}.`
+					throw `ERROR: Expected condition after if statement at line ${line+1}.` //if statement without condition
 				}
-				if(!isvalidvariable(condition,curvarsubs,varmatcher)){
+				if(!isvalidvariable(condition,cur_varsubstr,varmatcher)){
 					throw `ERROR: Invalid array index at line ${line+1}.`
 				}
-				condvarsubsstack.push([condition,createinitialvars(varname,varelemcount),null])
-				curindentlvl++;
+				varsubarr_stack.push([]);
+				peek_varsubarr_stack().push([condition,createinitialvars(varname,varelemcount)])
+			}
+			else if(stmt.startsWith("elif ")){
+				if(indentlvldiff!=1){
+					throw `ERROR: Unexpected elif statement at line ${line+1}.` //elif statement before if statement
+				}
+				if(checkelse_varsubarr(get_varsubarr_stack(indentlvl+1))){
+					throw `ERROR: Unexpected elif statement at line ${line+1}.` //elif statement after else statement
+				}
+				var condition = stmt.split(" ",2)[1].split(":",1)[0].trim()
+				//Validate condition
+				if(condition.length == 0){
+					throw `ERROR: Expected condition after elif statement at line ${line+1}.` //elif statement without condition
+				}
+				if(!isvalidvariable(condition,cur_varsubstr,varmatcher)){
+					throw `ERROR: Invalid array index at line ${line+1}.`
+				}
+				peek_varsubarr_stack().push([condition,createinitialvars(varname,varelemcount)]);
 			}
 			else if(stmt.startsWith("else")){
-				if(condvarsubsstack.length < indentlvl + 1){
-					throw `ERROR: Unexpected else statement at line ${line+1}.`//If-less else statement
+				if(indentlvldiff!=1){
+					throw `ERROR: Unexpected else statement at line ${line+1}.` //else statement before if statement
 				}
-				if(condvarsubsstack[condvarsubsstack.length-1][2] != null){
-					throw `ERROR: Unexpected else statement at line ${line+1}.`//Extra else statement
+				if(checkelse_varsubarr(get_varsubarr_stack(indentlvl+1))){
+					throw `ERROR: Unexpected else statement at line ${line+1}.` //else statement after else statement
 				}
-				condvarsubsstack[condvarsubsstack.length-1][2] = createinitialvars(varname,varelemcount);
-				curindentlvl++;
+				peek_varsubarr_stack().push([null,createinitialvars(varname,varelemcount)]);
 			}
 			else{
 				//assignment operator
@@ -327,18 +429,18 @@ function run(){
 					throw `ERROR: Invalid assignee at line ${line+1}.`; //Invalid assignee variable
 				}
 				var assigneeindex = parseInt(assigneematchres[1])
-				if(isNaN(assigneeindex)||assigneeindex<0||assigneeindex>=curvarsubs.length){
+				if(isNaN(assigneeindex)||assigneeindex<0||assigneeindex>=cur_varsubstr.length){
 					throw `ERROR: Invalid array index at line ${line+1}.`; //Invalid array index in assignee
 				}
-				if(!isvalidvariable(value,curvarsubs,varmatcher)){
+				if(!isvalidvariable(value,cur_varsubstr,varmatcher)){
 					throw `ERROR: Invalid array index at line ${line+1}.`; //Invalid array index in value
 				}
 				//console.log("Current variables",curvarsubs);
 				//console.log("Set variable in index",assigneeindex,"with",value);
 				//Variable substitution happens here
-				var valuesubbed = substitutevariable(value,curvarsubs,varmatcher)
+				var valuesubbed = substitutevariable(value,cur_varsubstr,varmatcher)
 				//Assignment happens here
-				curvarsubs[assigneeindex] = valuesubbed //Since only one variable is changed, we can directly modify the curvar
+				cur_varsubstr[assigneeindex] = valuesubbed //Since only one variable is changed, we can directly modify the curvar
 				//console.log("Current variables (after)",curvarsubs);
 			}
 		} catch (error) {
@@ -360,5 +462,5 @@ function run(){
 		output = output.replace(new RegExp(Object.keys(statements).map(key=>key.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&")).join("|"),"gi"),(m)=>statements[m])
 	}
 	result.value = output; */
-	result.value = `[${curvarsubs}]`;
+	result.value = `[${get_varsubarr_stack(0)[0][1]}]`;
 }
