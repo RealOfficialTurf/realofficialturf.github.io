@@ -15,9 +15,6 @@ codetext.addEventListener('keydown', function(e) {
 	}
   });
 
-function debugstringpos(string,pos){
-	return string+"\n"+" ".repeat(pos)+"^";
-}
 
 /**Replaces all instances of variables in value with the respective substituents
  * 
@@ -38,12 +35,27 @@ function substitutevariable(value,substituents,var_regex){
 		function(match,as_idx){
 			let id = parseInt(as_idx);
 			if(isNaN(id)||id<0||id>=substituents.length){
-				throw `ERROR: Out of bound detected. This should not happen. Report this error to the developer.`; //No variable detected
+				throw `ERROR: Out of bound detected. This should not happen. Report this error to the developer.`; //No variable detected, this should be caught already on the main function, but who knows.
 			}
 			let substituent = substituents[id]; //as_idx is string but it gets implicitly converted?!
-			console.log("Instances of",match,"in",value,"will be substituted with",substituent)
-			//No need parentheses if substituent is same as match
-			return match == substituent ? match : `(${substituent})`;
+			//console.log("Instances of",match,"in",value,"will be substituted with",substituent)
+			let omitbracket = false;
+			omitbracket = omitbracket || match == substituent; //No need parentheses if substituent is same as match
+			/* This regex works inline with how the app checks for integers and floats
+			Number	JS--	App-	Regex
+			0   	true	true	true
+			1234	true	true	true
+			0123	true*	true	true
+			0189	true	true	true
+			1.23	true	true	true
+			-123	true	true	true
+			-1.2	true	true	true
+			.123	true	false	false
+			-.12	true	false	false
+			* = Number is considered an octal
+			*/
+			omitbracket = omitbracket || /^-?[0-9]+(?:\.[0-9]+)?$/g.test(substituent) //No need parentheses if substituent is purely integer or float (does not match for hexadecimals and binary)
+			return omitbracket ? substituent : `(${substituent})`;
 		}
 	)
 }
@@ -96,24 +108,26 @@ function isvalidvariable(value,substituents,var_regex){
  * [5+2,5,a[2]]
 */
 
-console.log("Test!")
-
 function test1(){
 	codetext.value = 
-`global abcxyz[3]
-abcxyz[1]=abcxyz[1]+3
-abcxyz[2]=abcxyz[0]+abcxyz[1]+abcxyz[2]
-#[a[0],a[1]+3,a[0]+a[1]+a[2]]
-abcxyz[0]=abcxyz[1]*4
-#number 0 is replaced with abcxyz[1]*4, in which abcxyz[1] gets replaced with (abcxyz[1]+3), making it (abcxyz[1]+3)*4
-#In order words, abcxyz[1] is instance to be substituted, abcxyz[1]*4 is the value to look for such instances, and abcxyz[1]+3 is the substituent
-#[(abcxyz[1]+3)*4,abcxyz[1]+3,abcxyz[0]+abcxyz[1]+abcxyz[2]]
-##DEFINE abcxyz a`
+`array g[4]
+##DEFINE gold g[0]
+##DEFINE potion g[1]
+##DEFINE time g[2]
+##DEFINE transactionresult g[3]
+#Comments can be placed on its own in unindented code
+time=time+60 #Or inline
+if gold>100:
+	gold=gold-100
+	potion=potion+1 #Comments can only be placed inline when there is an indentation
+	transactionresult="Potion bought"
+else:
+	transactionresult="Not enough gold!"`
 }
 
 function test2(){
 	codetext.value = 
-`global a[4]
+`array a[4]
 a[2]=a[0]+a[1]+a[2]
 a[1]=a[1]+3
 if a[1]>100:
@@ -159,15 +173,15 @@ function run(){
 	statements = statements.map((stmt)=>stmt.trimEnd());
 	console.log(sourcecode); //For debugging purposes
 	//Get the first statement!
-	if(!statements[0].startsWith("global ")){
-		throw "ERROR: Code must start with \"global\"";
+	if(!statements[0].startsWith("array ")){
+		errmsg.value = "ERROR: Code must start with \"array\"";
 	}
 	//Parse the first statement to get the variable name and element count
 	var varcode = statements[0].split(" ",2)[1]
 	var varname = varcode.split("[",1)[0]
 	var varelemcount = parseInt(varcode.split("[",2)[1].split("]",1)[0])
 	if(isNaN(varelemcount)||varelemcount<=0||varelemcount>Number.MAX_SAFE_INTEGER){
-		throw "ERROR: Invalid element count.";
+		errmsg.value = "ERROR: Invalid element count.";
 	}
 	//Initialize variable substitutions based from the variable name and element count
 	/**
@@ -331,14 +345,13 @@ function run(){
 					}
 					var cur_value_temp = Array.from(cur_value);
 					var valuemask = Array.from({length: varelemcount}, (_v,i) => values1[i] != values2[i]);
-					console.log("Value mask",valuemask)
+					//console.log("Value mask",valuemask)
 					for(let i = 0;i<varelemcount;i++){
 						if(!valuemask[i]){
 							cur_value_temp[i] = `${values1[i]}`
 							continue;
 						}
-						console.log(values1,values2)
-						console.log(`${condition}?${values1[i]}:${values2[i]}`)
+						//console.log(`${condition}?${values1[i]}:${values2[i]}`)
 						cur_value_temp[i] = `(${condition}?${values1[i]}:${values2[i]})`
 					}
 					for(let i = 0;i<varelemcount;i++){
