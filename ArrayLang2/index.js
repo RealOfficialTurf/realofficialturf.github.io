@@ -111,18 +111,20 @@ function isvalidvariable(value,substituents,var_regex){
 function test1(){
 	codetext.value = 
 `array g[4]
-##DEFINE gold g[0]
-##DEFINE potion g[1]
-##DEFINE time g[2]
-##DEFINE transactionresult g[3]
+##DEFINE goldmoney g[0]
+##DEFINE potionitem g[1]
+##DEFINE playeraction g[2]
+##DEFINE actionresult g[3]
 #Comments can be placed on its own in unindented code
-time=time+60 #Or inline
-if gold>100:
-	gold=gold-100
-	potion=potion+1 #Comments can only be placed inline when there is an indentation
-	transactionresult="Potion bought"
+if playeraction="buy potion":
+	if gold>100:
+		goldmoney=goldmoney-100
+		potionitem=potionitem+1 #Comments can only be placed inline when there is an indentation
+		actionresult="Potion bought!"
+	else:
+		actionresult="Not enough gold!"
 else:
-	transactionresult="Not enough gold!"`
+	actionresult="Nothing to do."`
 }
 
 function test2(){
@@ -142,13 +144,28 @@ else:
 }
 
 function run(){
-	//Replace all the \n into spaces and removes beginning and trailing whitespace between ;
-	//Kinda like trim(), but whatever.
 	/** @type {string?} */
 	var sourcecode = codetext.value;
 	if(!sourcecode){
 		return;
 	}
+	sourcecode = sourcecode.replaceAll("\r\n","\n"); //Replaces newline and tabs to space
+	//Get the first statement before we process the ##DEFINE tag
+	var firststatement = sourcecode.split("\n",1)[0];
+	if(!firststatement.startsWith("array ")){
+		errmsg.value = "ERROR: Code must start with \"array\"";
+	}
+	//Parse the first statement to get the variable name and element count
+	var varcode = firststatement.split(" ",2)[1]
+	var varname = varcode.split("[",1)[0]
+	var varelemcount = parseInt(varcode.split("[",2)[1].split("]",1)[0])
+	if(isNaN(varelemcount)||varelemcount<=0||varelemcount>Number.MAX_SAFE_INTEGER){
+		errmsg.value = "ERROR: Invalid element count.";
+	}
+	
+	//Replace all the \n into spaces and removes beginning and trailing whitespace between ;
+	//Kinda like trim(), but whatever.
+	
 	{
 		const defmatcher = /^##DEFINE (\S+) (\S+)/gm;
 		/** @type {RegExpExecArray?} */
@@ -164,25 +181,15 @@ function run(){
 		}
 	}
 	sourcecode = sourcecode.replaceAll(/#.*/ig,""); //Removes comments with #
-	sourcecode = sourcecode.replaceAll("\r\n","\n"); //Replaces newline and tabs to space
 	//sourcecode = sourcecode.replaceAll(/(\s+\;)|(\;\s+)/ig,";"); //Removes all whitespace infront or behind the semicolon
 	//sourcecode = sourcecode.replaceAll(/(\s+\{)|(\{\s+)/ig,"{"); //Removes all whitespace infront or behind the open curly bracket
 	//sourcecode = sourcecode.replaceAll(/(\s+\})|(\}\s+)/ig,"}"); //Removes all whitespace infront or behind the close curly bracket
+
 	var statements = sourcecode.split("\n");
 	//statements = statements.filter((stmt)=>stmt.length>0); //Don't remove lines, we need them to keep track of errors at certain lines
 	statements = statements.map((stmt)=>stmt.trimEnd());
 	console.log(sourcecode); //For debugging purposes
-	//Get the first statement!
-	if(!statements[0].startsWith("array ")){
-		errmsg.value = "ERROR: Code must start with \"array\"";
-	}
-	//Parse the first statement to get the variable name and element count
-	var varcode = statements[0].split(" ",2)[1]
-	var varname = varcode.split("[",1)[0]
-	var varelemcount = parseInt(varcode.split("[",2)[1].split("]",1)[0])
-	if(isNaN(varelemcount)||varelemcount<=0||varelemcount>Number.MAX_SAFE_INTEGER){
-		errmsg.value = "ERROR: Invalid element count.";
-	}
+	
 	//Initialize variable substitutions based from the variable name and element count
 	/**
 	 * @param {string} name 
@@ -390,7 +397,8 @@ function run(){
 				 = 
 				 = [X,A1A2A3,B,C]
 				*/
-				var condition = stmt.split(" ",2)[1].split(":",1)[0].trim()
+				
+				var condition = stmt.slice(stmt.indexOf(" ")).split(":",1)[0].trim()
 				//Validate condition
 				if(condition.length == 0){
 					throw `ERROR: Expected condition after if statement at line ${line+1}.` //if statement without condition
@@ -408,7 +416,7 @@ function run(){
 				if(checkelse_varsubarr(get_varsubarr_stack(indentlvl+1))){
 					throw `ERROR: Unexpected elif statement at line ${line+1}.` //elif statement after else statement
 				}
-				var condition = stmt.split(" ",2)[1].split(":",1)[0].trim()
+				var condition = stmt.slice(stmt.indexOf(" ")).split(":",1)[0].trim()
 				//Validate condition
 				if(condition.length == 0){
 					throw `ERROR: Expected condition after elif statement at line ${line+1}.` //elif statement without condition
